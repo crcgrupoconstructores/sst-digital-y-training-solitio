@@ -82,11 +82,11 @@ if opcion == "Registrar Cliente":
                 conn = sqlite3.connect(config.DB_NAME)
                 cursor = conn.cursor()
                 
-                # 1. Insertar o recuperar Empresa
+                # 1. Insertar o recuperar Empresa (sin la columna regimen que no está en la tabla)
                 cursor.execute("""
-                    INSERT OR IGNORE INTO empresas (nit, dv, razon_social, regimen, direccion, ciudad, correo_fe, telefono)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (nit_val, dv, razon_social, regimen, direccion, ciudad, correo_fe_val, telefono_empresa))
+                    INSERT OR IGNORE INTO empresas (nit, dv, razon_social, direccion, ciudad, correo_fe, telefono)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (nit_val, dv, razon_social, direccion, ciudad, correo_fe_val, telefono_empresa))
                 
                 cursor.execute("SELECT id FROM empresas WHERE nit = ?", (nit_val,))
                 empresa_id = cursor.fetchone()[0]
