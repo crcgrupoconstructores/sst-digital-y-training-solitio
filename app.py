@@ -81,7 +81,7 @@ if opcion == "Registrar Cliente":
                 conn = sqlite3.connect(config.DB_NAME)
                 cursor = conn.cursor()
                 
-                # Asegurar que las tablas tengan la estructura correcta si ya existían mal creadas
+                # Forzar la creación limpia de tablas con los nombres correctos
                 cursor.execute("DROP TABLE IF EXISTS certificados")
                 cursor.execute("DROP TABLE IF EXISTS trabajadores")
                 cursor.execute("DROP TABLE IF EXISTS empresas")
@@ -127,7 +127,7 @@ if opcion == "Registrar Cliente":
                     )
                 """)
 
-                # 1. Insertar o recuperar Empresa
+                # 1. Insertar Empresa
                 cursor.execute("""
                     INSERT OR IGNORE INTO empresas (nit, dv, razon_social, direccion, ciudad, correo_fe, telefono)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -144,7 +144,7 @@ if opcion == "Registrar Cliente":
                 
                 trabajador_id = cursor.lastrowid
 
-                # 3. Insertar Certificado/Curso
+                # 3. Insertar Certificado
                 cursor.execute("""
                     INSERT INTO certificados (trabajador_id, nivel_curso, fecha_emision, fecha_vencimiento, alerta_30d_enviada, alerta_15d_enviada, alerta_5d_enviada)
                     VALUES (?, ?, ?, ?, 0, 0, 0)
