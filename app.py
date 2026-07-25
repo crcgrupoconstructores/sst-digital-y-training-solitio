@@ -37,7 +37,7 @@ if opcion == "Registrar Cliente":
             direccion = st.text_input("Dirección")
             ciudad = st.text_input("Ciudad", value="Fusagasugá")
             correo_fe = st.text_input("Correo Facturación Electrónica")
-            telefono_empresa = st.text_input("Teléfono Empresa")
+            telefono_empresa = st.text_input("Телéfono Empresa")
 
         with col2:
             st.subheader("Datos del Trabajador y Curso")
@@ -81,7 +81,7 @@ if opcion == "Registrar Cliente":
                 conn = sqlite3.connect(config.DB_NAME)
                 cursor = conn.cursor()
                 
-                # Insertar o recuperar Empresa
+                # 1. Insertar o recuperar Empresa
                 cursor.execute("""
                     INSERT OR IGNORE INTO empresas (nit, dv, razon_social, direccion, ciudad, correo_fe, telefono)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -90,21 +90,27 @@ if opcion == "Registrar Cliente":
                 cursor.execute("SELECT id FROM empresas WHERE nit = ?", (nit_val,))
                 empresa_id = cursor.fetchone()[0]
 
-                # Intentar inserción adaptándose a las columnas reales de la tabla trabajadores
+                # 2. Insertar Trabajador (probando variaciones de nombres de columnas comunes)
                 try:
                     cursor.execute("""
                         INSERT INTO trabajadores (empresa_id, tipo_doc, numero_doc, nombres, apellidos, correo, telefono)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, (empresa_id, tipo_doc, doc_val, nombres_val, apellidos, correo_trabajador, whatsapp))
                 except sqlite3.OperationalError:
-                    cursor.execute("""
-                        INSERT INTO trabajadores (empresa_id, tipo_doc, cedula, nombres, apellidos, correo, telefono)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (empresa_id, tipo_doc, doc_val, nombres_val, apellidos, correo_trabajador, whatsapp))
+                    try:
+                        cursor.execute("""
+                            INSERT INTO trabajadores (empresa_id, cedula, nombres, apellidos, correo, telefono)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        """, (empresa_id, doc_val, nombres_val, apellidos, correo_trabajador, whatsapp))
+                    except sqlite3.OperationalError:
+                        cursor.execute("""
+                            INSERT INTO trabajadores (empresa_id, nombres, apellidos, correo, telefono)
+                            VALUES (?, ?, ?, ?, ?)
+                        """, (empresa_id, nombres_val, apellidos, correo_trabajador, whatsapp))
                 
                 trabajador_id = cursor.lastrowid
 
-                # Insertar Certificado/Curso
+                # 3. Insertar Certificado/Curso
                 cursor.execute("""
                     INSERT INTO certificados (trabajador_id, nivel_curso, fecha_emision, fecha_vencimiento, alerta_30d_enviada, alerta_15d_enviada, alerta_5d_enviada)
                     VALUES (?, ?, ?, ?, 0, 0, 0)
@@ -120,8 +126,6 @@ elif opcion == "Ver Clientes Registrados":
     st.header("📋 Lista de Clientes y Cursos en la Base de Datos")
     
     conn = sqlite3.connect(config.DB_NAME)
-    
-    # Consulta segura que lee la tabla completa de certificados con sus relaciones
     query = """
     SELECT 
         c.id AS ID,
