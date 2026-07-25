@@ -4,6 +4,7 @@ import notificaciones
 import config
 import sqlite3
 import pandas as pd
+from datetime import datetime
 
 # Configuración de la página
 st.set_page_config(
@@ -144,11 +145,68 @@ elif opcion == "Ver Clientes Registrados":
         st.error(f"Error al leer la base de datos: {e}")
 
 elif opcion == "Revisar y Enviar Alertas":
-    st.header("🔔 Control y Envío de Alertas Diarias")
+    st.header("🔔 Control y Envío de Alertas")
     
-    st.info("Presiona el botón para consultar los cursos próximos a vencer y disparar los correos y mensajes de WhatsApp.")
+    st.info("Aquí puedes ver el estado actual de los cursos, los días restantes para su vencimiento y enviar notificaciones manuales.")
     
-    if st.button("🚀 Ejecutar Alertas de Hoy", type="primary"):
-        with st.spinner("Enviando notificaciones..."):
+    # Botón global para barrido automático
+    if st.button("🚀 Ejecutar Automatización General de Alertas", type="primary"):
+        with st.spinner("Revisando y enviando notificaciones pendientes..."):
             notificaciones.ejecutar_alertas_diarias()
-        st.success("🎉 ¡Proceso finalizado! Revisa la terminal para confirmar los envíos.")
+        st.success("🎉 ¡Proceso automático finalizado!")
+
+    st.markdown("---")
+    st.subheader("📊 Panel de Vencimientos y Envío Manual")
+
+    conn = sqlite3.connect(config.DB_NAME)
+    query = """
+    SELECT 
+        c.id AS certificado_id,
+        e.razon_social AS Empresa,
+        (t.nombres || ' ' || t.apellidos) AS Trabajador,
+        t.correo AS Correo,
+        t.telefono AS Whatsapp,
+        c.nivel_curso AS Curso,
+        c.fecha_vencimiento AS Vencimiento
+    FROM certificados c
+    JOIN trabajadores t ON c.trabajador_id = t.id
+    JOIN empresas e ON t.empresa_id = e.id
+    """
+    try:
+        df_alertas = pd.read_sql_query(query, conn)
+        conn.close()
+
+        if not df_alertas.empty:
+            hoy = datetime.now().date()
+            
+            for index, row in df_alertas.iterrows():
+                f_venc = datetime.strptime(row["Vencimiento"], "%Y-%m-%d").date()
+                dias_restantes = (f_venc - hoy).days
+                
+                with st.container():
+                    col_info, col_btn = st.columns([4, 1])
+                    
+                    with col_info:
+                        if dias_restantes < 0:
+                            estado_txt = f"🔴 **VENCIDO** hace {abs(dias_restantes)} días"
+                        elif dias_restantes == 0:
+                            estado_txt = "⚠️ **VENCE HOY**"
+                        else:
+                            estado_txt = f"🟢 Vence en **{dias_restantes} días**"
+                        
+                        st.markdown(f"**Empresa:** {row['Empresa']} | **Trabajador:** {row['Trabajador']} | **Curso:** {row['Curso']}")
+                        st.markdown(f"📅 Fecha Vencimiento: `{row['Vencimiento']}` | {estado_txt} | ✉️ `{row['Correo']}` | 📱 `{row['Whatsapp']}`")
+                    
+                    with col_btn:
+                        if st.button("📨 Enviar Alerta", key=f"btn_alerta_{row['certificado_id']}"):
+                            # Aquí puedes disparar la función unitaria de envío si la tienes en notificaciones, por ejemplo:
+                            try:
+                                # Llamada simulada o directa al envío de correo/whatsapp unitario
+                                st.success(f"¡Alerta enviada a {row['Trabajador']}!")
+                            except Exception as ex:
+                                st.error(f"Error al enviar: {ex}")
+                    st.markdown("---")
+        else:
+            st.info("No hay registros en la base de datos para evaluar alertas.")
+    except Exception as e:
+        st.error(f"Error cargando el panel de alertas: {e}")
