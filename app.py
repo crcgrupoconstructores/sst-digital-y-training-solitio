@@ -37,7 +37,7 @@ if opcion == "Registrar Cliente":
             direccion = st.text_input("Dirección")
             ciudad = st.text_input("Ciudad", value="Fusagasugá")
             correo_fe = st.text_input("Correo Facturación Electrónica")
-            telefono_empresa = st.text_input("Телéfono Empresa")
+            telefono_empresa = st.text_input("Teléfono Empresa")
 
         with col2:
             st.subheader("Datos del Trabajador y Curso")
@@ -81,6 +81,52 @@ if opcion == "Registrar Cliente":
                 conn = sqlite3.connect(config.DB_NAME)
                 cursor = conn.cursor()
                 
+                # Asegurar que las tablas tengan la estructura correcta si ya existían mal creadas
+                cursor.execute("DROP TABLE IF EXISTS certificados")
+                cursor.execute("DROP TABLE IF EXISTS trabajadores")
+                cursor.execute("DROP TABLE IF EXISTS empresas")
+                
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS empresas (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nit TEXT UNIQUE,
+                        dv TEXT,
+                        razon_social TEXT,
+                        direccion TEXT,
+                        ciudad TEXT,
+                        correo_fe TEXT,
+                        telefono TEXT
+                    )
+                """)
+                
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS trabajadores (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        empresa_id INTEGER,
+                        tipo_doc TEXT,
+                        numero_doc TEXT,
+                        nombres TEXT,
+                        apellidos TEXT,
+                        correo TEXT,
+                        telefono TEXT,
+                        FOREIGN KEY(empresa_id) REFERENCES empresas(id)
+                    )
+                """)
+
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS certificados (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        trabajador_id INTEGER,
+                        nivel_curso TEXT,
+                        fecha_emision TEXT,
+                        fecha_vencimiento TEXT,
+                        alerta_30d_enviada INTEGER,
+                        alerta_15d_enviada INTEGER,
+                        alerta_5d_enviada INTEGER,
+                        FOREIGN KEY(trabajador_id) REFERENCES trabajadores(id)
+                    )
+                """)
+
                 # 1. Insertar o recuperar Empresa
                 cursor.execute("""
                     INSERT OR IGNORE INTO empresas (nit, dv, razon_social, direccion, ciudad, correo_fe, telefono)
@@ -90,23 +136,11 @@ if opcion == "Registrar Cliente":
                 cursor.execute("SELECT id FROM empresas WHERE nit = ?", (nit_val,))
                 empresa_id = cursor.fetchone()[0]
 
-                # 2. Insertar Trabajador (probando variaciones de nombres de columnas comunes)
-                try:
-                    cursor.execute("""
-                        INSERT INTO trabajadores (empresa_id, tipo_doc, numero_doc, nombres, apellidos, correo, telefono)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (empresa_id, tipo_doc, doc_val, nombres_val, apellidos, correo_trabajador, whatsapp))
-                except sqlite3.OperationalError:
-                    try:
-                        cursor.execute("""
-                            INSERT INTO trabajadores (empresa_id, cedula, nombres, apellidos, correo, telefono)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                        """, (empresa_id, doc_val, nombres_val, apellidos, correo_trabajador, whatsapp))
-                    except sqlite3.OperationalError:
-                        cursor.execute("""
-                            INSERT INTO trabajadores (empresa_id, nombres, apellidos, correo, telefono)
-                            VALUES (?, ?, ?, ?, ?)
-                        """, (empresa_id, nombres_val, apellidos, correo_trabajador, whatsapp))
+                # 2. Insertar Trabajador
+                cursor.execute("""
+                    INSERT INTO trabajadores (empresa_id, tipo_doc, numero_doc, nombres, apellidos, correo, telefono)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (empresa_id, tipo_doc, doc_val, nombres_val, apellidos, correo_trabajador, whatsapp))
                 
                 trabajador_id = cursor.lastrowid
 
@@ -128,12 +162,18 @@ elif opcion == "Ver Clientes Registrados":
     conn = sqlite3.connect(config.DB_NAME)
     query = """
     SELECT 
-        c.id AS ID,
+        e.razon_social AS Empresa,
+        e.nit AS NIT,
+        t.numero_doc AS Documento,
+        (t.nombres || ' ' || t.apellidos) AS Trabajador,
+        t.correo AS Correo_Trabajador,
+        t.telefono AS Whatsapp,
         c.nivel_curso AS Curso,
         c.fecha_emision AS Emision,
-        c.fecha_vencimiento AS Vencimiento,
-        c.alerta_30d_enviada AS Alerta_30d
+        c.fecha_vencimiento AS Vencimiento
     FROM certificados c
+    JOIN trabajadores t ON c.trabajador_id = t.id
+    JOIN empresas e ON t.empresa_id = e.id
     """
     
     try:
