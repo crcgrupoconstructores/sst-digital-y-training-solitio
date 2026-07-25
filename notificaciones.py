@@ -108,7 +108,3 @@ def enviar_alerta_individual(certificado_id):
         return True, " | ".join(resultados)
     except Exception as e:
         return False, f"Excepción general: {str(e)}"
-        
-    except Exception as e:
-        print(f"Error procesando alertas: {e}")
-        return False, str(e)
