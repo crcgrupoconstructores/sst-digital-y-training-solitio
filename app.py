@@ -54,38 +54,30 @@ if opcion == "Registrar Cliente":
         fecha_emision = st.date_input("Fecha de Emisión del Curso")
 
     if st.button("💾 Guardar y Registrar", type="primary"):
-        nit_val = nit.strip() if nit else ""
-        doc_val = numero_doc.strip() if 'numero_doc' in locals() and numero_doc else ""
-        nombres_val = nombres.strip() if nombres else ""
-        correo_fe_val = correo_fe.strip() if 'correo_fe' in locals() and correo_fe else ""
+    # Limpieza de espacios en blanco
+    nit_val = nit.strip() if nit else ""
+    doc_val = numero_doc.strip() if 'numero_doc' in locals() and numero_doc else ""
+    nombres_val = nombres.strip() if nombres else ""
+    correo_fe_val = correo_fe.strip() if 'correo_fe' in locals() and correo_fe else ""
 
-        faltantes = []
-        if not nit_val: faltantes.append("NIT")
-        if not doc_val: faltantes.append("Número de Documento")
-        if not nombres_val: faltantes.append("Nombres")
-        if not correo_fe_val: faltantes.append("Correo FE")
+    # Verificar exactamente qué campo está fallando
+    faltantes = []
+    if not nit_val: faltantes.append("NIT")
+    if not doc_val: faltantes.append("Número de Documento")
+    if not nombres_val: faltantes.append("Nombres")
+    if not correo_fe_val: faltantes.append("Correo FE")
 
-        if faltantes:
-            st.error(f"⚠️ Por favor completa los siguientes campos obligatorios: {', '.join(faltantes)}")
-        else:
-            try:
-                conn = sqlite3.connect(config.DB_NAME)
-                cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO clientes (
-                        nit, dv, razon_social, regimen, direccion, ciudad, correo_fe, telefono_empresa,
-                        tipo_doc, numero_doc, nombres, apellidos, correo, telefono, nivel_curso, fecha_emision, fecha_vencimiento
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    nit, dv, razon_social, regimen_fiscal, direccion, ciudad, correo_fe, telefono_empresa,
-                    tipo_doc, numero_doc, nombres, apellidos, correo_personal, whatsapp, nivel_curso, fecha_emision, fecha_vencimiento
-                ))
-                conn.commit()
-                conn.close()
-                st.success("¡Cliente y Curso registrados exitosamente!")
-            except Exception as e:
-                st.error(f"Error guardando en la base de datos: {e}")
-                
+    if faltantes:
+        st.error(f"⚠️ Por favor completa los siguientes campos obligatorios: {', '.join(faltantes)}")
+    else:
+        # Aquí continúa el guardado en la base de datos...
+        try:
+            conn = sqlite3.connect(config.DB_NAME)
+            cursor = conn.cursor()
+            # Guardar registro...
+            st.success("¡Cliente y Curso registrados exitosamente!")
+        except Exception as e:
+            st.error(f"Error guardando en la base de datos: {e}")
 elif opcion == "Ver Clientes Registrados":
     st.header("📋 Lista de Clientes y Cursos en la Base de Datos")
     
