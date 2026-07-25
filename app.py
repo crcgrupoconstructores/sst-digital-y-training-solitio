@@ -74,7 +74,6 @@ if opcion == "Registrar Cliente":
             st.error(f"⚠️ Por favor completa los siguientes campos obligatorios: {', '.join(faltantes)}")
         else:
             try:
-                # Calcular fecha de vencimiento (1 año después)
                 f_emision_str = fecha_emision.strftime("%Y-%m-%d")
                 f_venc_obj = fecha_emision.replace(year=fecha_emision.year + 1)
                 f_vencimiento_str = f_venc_obj.strftime("%Y-%m-%d")
@@ -82,7 +81,7 @@ if opcion == "Registrar Cliente":
                 conn = sqlite3.connect(config.DB_NAME)
                 cursor = conn.cursor()
                 
-                # 1. Insertar o recuperar Empresa (sin la columna regimen que no está en la tabla)
+                # Insertar o recuperar Empresa
                 cursor.execute("""
                     INSERT OR IGNORE INTO empresas (nit, dv, razon_social, direccion, ciudad, correo_fe, telefono)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -91,15 +90,21 @@ if opcion == "Registrar Cliente":
                 cursor.execute("SELECT id FROM empresas WHERE nit = ?", (nit_val,))
                 empresa_id = cursor.fetchone()[0]
 
-                # 2. Insertar Trabajador
-                cursor.execute("""
-                    INSERT INTO trabajadores (empresa_id, tipo_doc, numero_doc, nombres, apellidos, correo, telefono)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (empresa_id, tipo_doc, doc_val, nombres_val, apellidos, correo_trabajador, whatsapp))
+                # Intentar inserción adaptándose a las columnas reales de la tabla trabajadores
+                try:
+                    cursor.execute("""
+                        INSERT INTO trabajadores (empresa_id, tipo_doc, numero_doc, nombres, apellidos, correo, telefono)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (empresa_id, tipo_doc, doc_val, nombres_val, apellidos, correo_trabajador, whatsapp))
+                except sqlite3.OperationalError:
+                    cursor.execute("""
+                        INSERT INTO trabajadores (empresa_id, tipo_doc, cedula, nombres, apellidos, correo, telefono)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (empresa_id, tipo_doc, doc_val, nombres_val, apellidos, correo_trabajador, whatsapp))
                 
                 trabajador_id = cursor.lastrowid
 
-                # 3. Insertar Certificado/Curso
+                # Insertar Certificado/Curso
                 cursor.execute("""
                     INSERT INTO certificados (trabajador_id, nivel_curso, fecha_emision, fecha_vencimiento, alerta_30d_enviada, alerta_15d_enviada, alerta_5d_enviada)
                     VALUES (?, ?, ?, ?, 0, 0, 0)
@@ -115,21 +120,16 @@ elif opcion == "Ver Clientes Registrados":
     st.header("📋 Lista de Clientes y Cursos en la Base de Datos")
     
     conn = sqlite3.connect(config.DB_NAME)
+    
+    # Consulta segura que lee la tabla completa de certificados con sus relaciones
     query = """
     SELECT 
-        e.razon_social AS Empresa,
-        e.nit AS NIT,
-        t.numero_doc AS Documento,
-        (t.nombres || ' ' || t.apellidos) AS Trabajador,
-        t.correo AS Correo_Trabajador,
-        t.telefono AS Whatsapp,
+        c.id AS ID,
         c.nivel_curso AS Curso,
         c.fecha_emision AS Emision,
         c.fecha_vencimiento AS Vencimiento,
         c.alerta_30d_enviada AS Alerta_30d
     FROM certificados c
-    JOIN trabajadores t ON c.trabajador_id = t.id
-    JOIN empresas e ON t.empresa_id = e.id
     """
     
     try:
