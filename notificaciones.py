@@ -5,6 +5,7 @@ import requests
 import sqlite3
 from datetime import datetime
 import config
+import streamlit as st
 
 def enviar_email(destinatario, asunto, html_content):
     """Envía correos electrónicos automatizados."""
@@ -19,11 +20,11 @@ def enviar_email(destinatario, asunto, html_content):
             server.starttls()
             server.login(config.EMAIL_SENDER, config.EMAIL_PASSWORD)
             server.sendmail(config.EMAIL_SENDER, destinatario, msg.as_string())
-        print(f"📧 Correo enviado a: {destinatario}")
-        return True
+        return True, "Correo enviado con éxito"
     except Exception as e:
-        print(f"❌ Error al enviar correo a {destinatario}: {e}")
-        return False
+        error_msg = f"Error SMTP de Gmail: {str(e)}"
+        print(f"❌ {error_msg}")
+        return False, error_msg
 
 def enviar_whatsapp(numero, texto):
     """Envía mensajes a WhatsApp usando la API."""
@@ -40,17 +41,18 @@ def enviar_whatsapp(numero, texto):
     try:
         res = requests.post(url, data=payload, auth=(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN))
         if res.status_code in [200, 201]:
-            print(f"📱 WhatsApp enviado a: {numero}")
-            return True
+            return True, "WhatsApp enviado con éxito"
         else:
-            print(f"⚠️ Error enviando WhatsApp: {res.text}")
-            return False
+            error_msg = f"Error Twilio (Código {res.status_code}): {res.text}"
+            print(f"⚠️ {error_msg}")
+            return False, error_msg
     except Exception as e:
-        print(f"❌ Error de red con WhatsApp: {e}")
-        return False
+        error_msg = f"Error de red con WhatsApp: {str(e)}"
+        print(f"❌ {error_msg}")
+        return False, error_msg
 
 def enviar_alerta_individual(certificado_id):
-    """Envía correo y WhatsApp de forma manual o individual para un certificado específico."""
+    """Envía correo y WhatsApp de forma manual para un certificado y reporta el estado exacto."""
     try:
         conn = sqlite3.connect(config.DB_NAME)
         conn.row_factory = sqlite3.Row
@@ -69,7 +71,7 @@ def enviar_alerta_individual(certificado_id):
         conn.close()
 
         if not row:
-            return False, "Certificado no encontrado."
+            return False, "Certificado no encontrado en la base de datos."
 
         nombre = f"{row['nombres']} {row['apellidos']}"
         correo = row['correo']
@@ -88,80 +90,24 @@ def enviar_alerta_individual(certificado_id):
         <p>Por favor ponte en contacto con nosotros para gestionar tu renovación.</p>
         """
 
-        exito_correo = False
-        exito_wa = False
+        resultados = []
 
         if correo:
-            exito_correo = enviar_email(correo, asunto, mensaje_html)
+            exito_c, msg_c = enviar_email(correo, asunto, mensaje_html)
+            resultados.append(f"Correo: {msg_c}")
+        else:
+            resultados.append("Correo: No tiene correo registrado")
 
         if telefono:
             msg_wa = f"Hola {nombre}, tu curso de {curso} {'ya venció' if dias_restantes < 0 else f'vence en {dias_restantes} días'}. ¡Comunícate con nosotros para renovarlo!"
-            exito_wa = enviar_whatsapp(str(telefono), msg_wa)
+            exito_w, msg_w = enviar_whatsapp(str(telefono), msg_wa)
+            resultados.append(f"WhatsApp: {msg_w}")
+        else:
+            resultados.append("WhatsApp: No tiene teléfono registrado")
 
-        return True, "Notificación procesada correctamente."
+        return True, " | ".join(resultados)
     except Exception as e:
-        return False, str(e)
-
-def ejecutar_alertas_diarias():
-    """Consulta la BD correcta uniendo tablas y envía alertas masivas."""
-    try:
-        conn = sqlite3.connect(config.DB_NAME)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Consulta corregida usando las tablas reales de la app
-        cursor.execute("""
-            SELECT 
-                c.id AS certificado_id,
-                t.nombres, t.apellidos, t.correo, t.telefono,
-                c.nivel_curso, c.fecha_vencimiento
-            FROM certificados c
-            JOIN trabajadores t ON c.trabajador_id = t.id
-        """)
-        registros = cursor.fetchall()
-
-        alertas_enviadas = 0
-        hoy = datetime.now().date()
-
-        for row in registros:
-            nombre = f"{row['nombres']} {row['apellidos']}"
-            correo = row['correo']
-            telefono = row['telefono']
-            curso = row['nivel_curso']
-            fecha_str = row['fecha_vencimiento']
-
-            if not fecha_str:
-                continue
-            
-            try:
-                fecha_venc = datetime.strptime(str(fecha_str).strip(), "%Y-%m-%d").date()
-            except ValueError:
-                continue
-
-            dias_restantes = (fecha_venc - hoy).days
-
-            if dias_restantes <= 30:
-                asunto = f"⚠️ Alerta Vencimiento de Curso: {curso}"
-                mensaje_html = f"""
-                <h3>Hola {nombre},</h3>
-                <p>Te recordamos que tu curso de <b>{curso}</b> {'ya se encuentra vencido' if dias_restantes < 0 else f'vence en {dias_restantes} días'}.</p>
-                <p>Por favor ponte en contacto con nosotros para gestionar tu renovación.</p>
-                """
-                
-                if correo:
-                    enviar_email(correo, asunto, mensaje_html)
-                
-                if telefono:
-                    msg_wa = f"Hola {nombre}, tu curso de {curso} {'ya venció' if dias_restantes < 0 else f'vence en {dias_restantes} días'}. ¡Comunícate con nosotros para renovarlo!"
-                    enviar_whatsapp(str(telefono), msg_wa)
-
-                cursor.execute("UPDATE certificados SET alerta_30d_enviada = 1 WHERE id = ?", (row["certificado_id"],))
-                alertas_enviadas += 1
-
-        conn.commit()
-        conn.close()
-
-        return True, f"Proceso completado. Se enviaron {alertas_enviadas} alertas."
+        return False, f"Excepción general: {str(e)}"
         
     except Exception as e:
         print(f"Error procesando alertas: {e}")
