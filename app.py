@@ -197,13 +197,14 @@ elif opcion == "Revisar y Enviar Alertas":
                         st.markdown(f"**Empresa:** {row['Empresa']} | **Trabajador:** {row['Trabajador']} | **Curso:** {row['Curso']}")
                         st.markdown(f"📅 Fecha Vencimiento: `{row['Vencimiento']}` | {estado_txt} | ✉️ `{row['Correo']}` | 📱 `{row['Whatsapp']}`")
                     
-                    with col_btn:
-                        if st.button("📨 Enviar Alerta", key=f"btn_alerta_{row['certificado_id']}"):
-                            exito, mensaje = notificaciones.enviar_alerta_individual(row['certificado_id'])
-                            if exito:
-                                st.success(f"¡Alerta enviada a {row['Trabajador']}!")
-                            else:
-                                st.error(f"Error: {mensaje}")
+                   with col_btn:
+    if st.button("📨 Enviar Alerta", key=f"btn_alerta_{row['certificado_id']}"):
+        with st.spinner("Enviando notificación..."):
+            exito, mensaje = notificaciones.enviar_alerta_individual(row['certificado_id'])
+            if exito:
+                st.success(mensaje)
+            else:
+                st.error(mensaje)
                     st.markdown("---")
         else:
             st.info("No hay registros en la base de datos para evaluar alertas.")
