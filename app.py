@@ -4,7 +4,6 @@ import notificaciones
 import config
 import sqlite3
 import pandas as pd
-from datetime import datetime, timedelta
 
 # Configuración de la página
 st.set_page_config(
@@ -21,6 +20,18 @@ st.markdown("---")
 
 # Menú lateral
 opcion = st.sidebar.radio("Navegación", ["Registrar Cliente", "Ver Clientes Registrados", "Revisar y Enviar Alertas"])
+
+# Opción de emergencia en la barra lateral para limpiar base de datos si es necesario
+if st.sidebar.button("🧹 Reiniciar Base de Datos"):
+    try:
+        import os
+        if os.path.exists(config.DB_NAME):
+            os.remove(config.DB_NAME)
+        database.inicializar_bd()
+        st.sidebar.success("¡Base de datos reiniciada con éxito!")
+        st.rerun()
+    except Exception as e:
+        st.sidebar.error(f"Error al reiniciar: {e}")
 
 if opcion == "Registrar Cliente":
     st.header("📝 Registro de Nuevo Cliente")
@@ -64,14 +75,8 @@ if opcion == "Registrar Cliente":
         nombres_val = nombres.strip()
         correo_fe_val = correo_fe.strip()
 
-        faltantes = []
-        if not nit_val: faltantes.append("NIT")
-        if not doc_val: faltantes.append("Número de Documento")
-        if not nombres_val: faltantes.append("Nombres")
-        if not correo_fe_val: faltantes.append("Correo FE")
-
-        if faltantes:
-            st.error(f"⚠️ Por favor completa los siguientes campos obligatorios: {', '.join(faltantes)}")
+        if not all([nit_val, doc_val, nombres_val, correo_fe_val]):
+            st.error("⚠️ Por favor completa los campos obligatorios (NIT, Documento, Nombres y Correo FE).")
         else:
             try:
                 f_emision_str = fecha_emision.strftime("%Y-%m-%d")
@@ -81,53 +86,6 @@ if opcion == "Registrar Cliente":
                 conn = sqlite3.connect(config.DB_NAME)
                 cursor = conn.cursor()
                 
-                # Forzar la creación limpia de tablas con los nombres correctos
-                cursor.execute("DROP TABLE IF EXISTS certificados")
-                cursor.execute("DROP TABLE IF EXISTS trabajadores")
-                cursor.execute("DROP TABLE IF EXISTS empresas")
-                
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS empresas (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        nit TEXT UNIQUE,
-                        dv TEXT,
-                        razon_social TEXT,
-                        direccion TEXT,
-                        ciudad TEXT,
-                        correo_fe TEXT,
-                        telefono TEXT
-                    )
-                """)
-                
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS trabajadores (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        empresa_id INTEGER,
-                        tipo_doc TEXT,
-                        numero_doc TEXT,
-                        nombres TEXT,
-                        apellidos TEXT,
-                        correo TEXT,
-                        telefono TEXT,
-                        FOREIGN KEY(empresa_id) REFERENCES empresas(id)
-                    )
-                """)
-
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS certificados (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        trabajador_id INTEGER,
-                        nivel_curso TEXT,
-                        fecha_emision TEXT,
-                        fecha_vencimiento TEXT,
-                        alerta_30d_enviada INTEGER,
-                        alerta_15d_enviada INTEGER,
-                        alerta_5d_enviada INTEGER,
-                        FOREIGN KEY(trabajador_id) REFERENCES trabajadores(id)
-                    )
-                """)
-
-                # 1. Insertar Empresa
                 cursor.execute("""
                     INSERT OR IGNORE INTO empresas (nit, dv, razon_social, direccion, ciudad, correo_fe, telefono)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -136,7 +94,6 @@ if opcion == "Registrar Cliente":
                 cursor.execute("SELECT id FROM empresas WHERE nit = ?", (nit_val,))
                 empresa_id = cursor.fetchone()[0]
 
-                # 2. Insertar Trabajador
                 cursor.execute("""
                     INSERT INTO trabajadores (empresa_id, tipo_doc, numero_doc, nombres, apellidos, correo, telefono)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -144,7 +101,6 @@ if opcion == "Registrar Cliente":
                 
                 trabajador_id = cursor.lastrowid
 
-                # 3. Insertar Certificado
                 cursor.execute("""
                     INSERT INTO certificados (trabajador_id, nivel_curso, fecha_emision, fecha_vencimiento, alerta_30d_enviada, alerta_15d_enviada, alerta_5d_enviada)
                     VALUES (?, ?, ?, ?, 0, 0, 0)
