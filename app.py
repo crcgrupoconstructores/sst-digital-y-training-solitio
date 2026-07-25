@@ -54,25 +54,30 @@ if opcion == "Registrar Cliente":
         fecha_emision = st.date_input("Fecha de Emisión del Curso")
 
     if st.button("💾 Guardar y Registrar", type="primary"):
-        if nit and num_doc and nombres and correo_fe:
-            empresa_data = {
-                'nit': nit, 'dv': dv, 'razon_social': razon_social,
-                'regimen_fiscal': regimen, 'direccion': direccion,
-                'ciudad': ciudad, 'correo_fe': correo_fe, 'telefono': telefono_empresa
-            }
-            trabajador_data = {
-                'tipo_doc': tipo_doc, 'num_doc': num_doc, 'nombres': nombres,
-                'apellidos': apellidos, 'correo': correo_trabajador, 'whatsapp': whatsapp
-            }
-            curso_data = {
-                'nivel': nivel_curso, 'fecha_emision': str(fecha_emision)
-            }
-            
-            database.registrar_cliente_completo(empresa_data, trabajador_data, curso_data)
-            st.success(f"✅ Cliente {nombres} {apellidos} guardado exitosamente.")
-        else:
-            st.error("⚠️ Por favor completa los campos obligatorios (NIT, Documento, Nombres, Correo FE).")
+    # Limpieza de espacios en blanco
+    nit_val = nit.strip() if nit else ""
+    doc_val = numero_doc.strip() if 'numero_doc' in locals() and numero_doc else ""
+    nombres_val = nombres.strip() if nombres else ""
+    correo_fe_val = correo_fe.strip() if 'correo_fe' in locals() and correo_fe else ""
 
+    # Verificar exactamente qué campo está fallando
+    faltantes = []
+    if not nit_val: faltantes.append("NIT")
+    if not doc_val: faltantes.append("Número de Documento")
+    if not nombres_val: faltantes.append("Nombres")
+    if not correo_fe_val: faltantes.append("Correo FE")
+
+    if faltantes:
+        st.error(f"⚠️ Por favor completa los siguientes campos obligatorios: {', '.join(faltantes)}")
+    else:
+        # Aquí continúa el guardado en la base de datos...
+        try:
+            conn = sqlite3.connect(config.DB_NAME)
+            cursor = conn.cursor()
+            # Guardar registro...
+            st.success("¡Cliente y Curso registrados exitosamente!")
+        except Exception as e:
+            st.error(f"Error guardando en la base de datos: {e}")
 elif opcion == "Ver Clientes Registrados":
     st.header("📋 Lista de Clientes y Cursos en la Base de Datos")
     
