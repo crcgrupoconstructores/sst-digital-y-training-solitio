@@ -53,19 +53,28 @@ def ejecutar_alertas_diarias():
     """Consulta la BD y envía las alertas de cursos vencidos o próximos a vencer."""
     try:
         conn = sqlite3.connect(config.DB_NAME)
+        conn.row_factory = sqlite3.Row  # Permite acceder a las columnas por su nombre exacto
         cursor = conn.cursor()
         
-        # Consultar clientes/alumnos con sus fechas de vencimiento
-        cursor.execute("SELECT nombre, correo, telefono, curso, fecha_vencimiento FROM clientes")
+        # Consultar la tabla de registros
+        cursor.execute("SELECT * FROM clientes")
         registros = cursor.fetchall()
-        conn.close()
 
         alertas_enviadas = 0
         hoy = datetime.now().date()
 
-        for nombre, correo, telefono, curso, fecha_str in registros:
+        for row in registros:
+            # Obtener datos de forma segura sin importar variaciones de nombre
+            nombre = row["nombre"] if "nombre" in row.keys() else "Cliente"
+            correo = row["correo"] if "correo" in row.keys() else row.get("email", None)
+            telefono = row["telefono"] if "telefono" in row.keys() else row.get("celular", None)
+            curso = row["nivel_curso"] if "nivel_curso" in row.keys() else row.get("curso", "Curso de Alturas")
+            fecha_str = row["fecha_vencimiento"] if "fecha_vencimiento" in row.keys() else None
+
             if not fecha_str:
                 continue
+            
+            fecha_str = str(fecha_str).replace("/", "-").strip()
             
             try:
                 fecha_venc = datetime.strptime(fecha_str, "%Y-%m-%d").date()
@@ -74,7 +83,7 @@ def ejecutar_alertas_diarias():
 
             dias_restantes = (fecha_venc - hoy).days
 
-            # Alerta para cursos por vencer (30 días o menos) o ya vencidos
+            # Disparar si faltan 30 días o menos para el 2026-08-01 (faltan 7 días)
             if dias_restantes <= 30:
                 asunto = f"⚠️ Alerta Vencimiento de Curso: {curso}"
                 mensaje_html = f"""
@@ -83,18 +92,23 @@ def ejecutar_alertas_diarias():
                 <p>Por favor ponte en contacto con nosotros para gestionar tu renovación.</p>
                 """
                 
-                # Intentar enviar correo si existe
                 if correo:
                     enviar_email(correo, asunto, mensaje_html)
                 
-                # Intentar enviar WhatsApp si existe
                 if telefono:
                     msg_wa = f"Hola {nombre}, tu curso de {curso} {'ya venció' if dias_restantes < 0 else f'vence en {dias_restantes} días'}. ¡Comunícate con nosotros para renovarlo!"
-                    enviar_whatsapp(telefono, msg_wa)
+                    enviar_whatsapp(str(telefono), msg_wa)
 
+                # Marcar en la base de datos que ya se envió la alerta de 30 días
+                if "id" in row.keys():
+                    cursor.execute("UPDATE clientes SET alerta_30d_enviada = 1 WHERE id = ?", (row["id"],))
+                
                 alertas_enviadas += 1
 
-        return True, f"Proceso completado. Se procesaron {alertas_enviadas} alertas."
+        conn.commit()
+        conn.close()
+
+        return True, f"Proceso completado. Se enviaron {alertas_enviadas} alertas."
         
     except Exception as e:
         print(f"Error procesando alertas: {e}")
