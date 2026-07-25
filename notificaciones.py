@@ -3,7 +3,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import requests
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime
 import config
 
 def enviar_email(destinatario, asunto, html_content):
@@ -28,7 +28,7 @@ def enviar_email(destinatario, asunto, html_content):
 def enviar_whatsapp(numero, texto):
     """Envía mensajes a WhatsApp usando la API."""
     if not numero.startswith("+"):
-        numero = "+57" + numero  # Indicativo del país (ej. Colombia +57)
+        numero = "+57" + numero
 
     url = f"https://api.twilio.com/2010-04-01/Accounts/{config.TWILIO_ACCOUNT_SID}/Messages.json"
     payload = {
@@ -49,41 +49,97 @@ def enviar_whatsapp(numero, texto):
         print(f"❌ Error de red con WhatsApp: {e}")
         return False
 
-def ejecutar_alertas_diarias():
-    """Consulta la BD y envía las alertas de cursos vencidos o próximos a vencer."""
+def enviar_alerta_individual(certificado_id):
+    """Envía correo y WhatsApp de forma manual o individual para un certificado específico."""
     try:
         conn = sqlite3.connect(config.DB_NAME)
-        conn.row_factory = sqlite3.Row  # Permite acceder a las columnas por su nombre exacto
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT 
+                t.nombres, t.apellidos, t.correo, t.telefono, 
+                c.nivel_curso, c.fecha_vencimiento
+            FROM certificados c
+            JOIN trabajadores t ON c.trabajador_id = t.id
+            WHERE c.id = ?
+        """, (certificado_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return False, "Certificado no encontrado."
+
+        nombre = f"{row['nombres']} {row['apellidos']}"
+        correo = row['correo']
+        telefono = row['telefono']
+        curso = row['nivel_curso']
+        fecha_str = row['fecha_vencimiento']
+
+        hoy = datetime.now().date()
+        fecha_venc = datetime.strptime(fecha_str, "%Y-%m-%d").date()
+        dias_restantes = (fecha_venc - hoy).days
+
+        asunto = f"⚠️ Alerta Vencimiento de Curso: {curso}"
+        mensaje_html = f"""
+        <h3>Hola {nombre},</h3>
+        <p>Te recordamos que tu curso de <b>{curso}</b> {'ya se encuentra vencido' if dias_restantes < 0 else f'vence en {dias_restantes} días'}.</p>
+        <p>Por favor ponte en contacto con nosotros para gestionar tu renovación.</p>
+        """
+
+        exito_correo = False
+        exito_wa = False
+
+        if correo:
+            exito_correo = enviar_email(correo, asunto, mensaje_html)
+
+        if telefono:
+            msg_wa = f"Hola {nombre}, tu curso de {curso} {'ya venció' if dias_restantes < 0 else f'vence en {dias_restantes} días'}. ¡Comunícate con nosotros para renovarlo!"
+            exito_wa = enviar_whatsapp(str(telefono), msg_wa)
+
+        return True, "Notificación procesada correctamente."
+    except Exception as e:
+        return False, str(e)
+
+def ejecutar_alertas_diarias():
+    """Consulta la BD correcta uniendo tablas y envía alertas masivas."""
+    try:
+        conn = sqlite3.connect(config.DB_NAME)
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        # Consultar la tabla de registros
-        cursor.execute("SELECT * FROM clientes")
+        # Consulta corregida usando las tablas reales de la app
+        cursor.execute("""
+            SELECT 
+                c.id AS certificado_id,
+                t.nombres, t.apellidos, t.correo, t.telefono,
+                c.nivel_curso, c.fecha_vencimiento
+            FROM certificados c
+            JOIN trabajadores t ON c.trabajador_id = t.id
+        """)
         registros = cursor.fetchall()
 
         alertas_enviadas = 0
         hoy = datetime.now().date()
 
         for row in registros:
-            # Obtener datos de forma segura sin importar variaciones de nombre
-            nombre = row["nombre"] if "nombre" in row.keys() else "Cliente"
-            correo = row["correo"] if "correo" in row.keys() else row.get("email", None)
-            telefono = row["telefono"] if "telefono" in row.keys() else row.get("celular", None)
-            curso = row["nivel_curso"] if "nivel_curso" in row.keys() else row.get("curso", "Curso de Alturas")
-            fecha_str = row["fecha_vencimiento"] if "fecha_vencimiento" in row.keys() else None
+            nombre = f"{row['nombres']} {row['apellidos']}"
+            correo = row['correo']
+            telefono = row['telefono']
+            curso = row['nivel_curso']
+            fecha_str = row['fecha_vencimiento']
 
             if not fecha_str:
                 continue
             
-            fecha_str = str(fecha_str).replace("/", "-").strip()
-            
             try:
-                fecha_venc = datetime.strptime(fecha_str, "%Y-%m-%d").date()
+                fecha_venc = datetime.strptime(str(fecha_str).strip(), "%Y-%m-%d").date()
             except ValueError:
                 continue
 
             dias_restantes = (fecha_venc - hoy).days
 
-            # Disparar si faltan 30 días o menos para el 2026-08-01 (faltan 7 días)
             if dias_restantes <= 30:
                 asunto = f"⚠️ Alerta Vencimiento de Curso: {curso}"
                 mensaje_html = f"""
@@ -99,10 +155,7 @@ def ejecutar_alertas_diarias():
                     msg_wa = f"Hola {nombre}, tu curso de {curso} {'ya venció' if dias_restantes < 0 else f'vence en {dias_restantes} días'}. ¡Comunícate con nosotros para renovarlo!"
                     enviar_whatsapp(str(telefono), msg_wa)
 
-                # Marcar en la base de datos que ya se envió la alerta de 30 días
-                if "id" in row.keys():
-                    cursor.execute("UPDATE clientes SET alerta_30d_enviada = 1 WHERE id = ?", (row["id"],))
-                
+                cursor.execute("UPDATE certificados SET alerta_30d_enviada = 1 WHERE id = ?", (row["certificado_id"],))
                 alertas_enviadas += 1
 
         conn.commit()
