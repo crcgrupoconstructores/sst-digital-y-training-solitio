@@ -1,8 +1,10 @@
 import streamlit as st
 import database
 import notificaciones
+import config
 import sqlite3
 import pandas as pd
+from datetime import datetime, timedelta
 
 # Configuración de la página
 st.set_page_config(
@@ -23,69 +25,108 @@ opcion = st.sidebar.radio("Navegación", ["Registrar Cliente", "Ver Clientes Reg
 if opcion == "Registrar Cliente":
     st.header("📝 Registro de Nuevo Cliente")
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Datos de la Empresa")
-        nit = st.text_input("NIT")
-        dv = st.text_input("Dígito de Verificación (DV)", max_chars=1)
-        razon_social = st.text_input("Razón Social")
-        regimen = st.selectbox("Régimen Fiscal", ["Simplificado", "Común", "Especial"])
-        direccion = st.text_input("Dirección")
-        ciudad = st.text_input("Ciudad", value="Fusagasugá")
-        correo_fe = st.text_input("Correo Facturación Electrónica")
-        telefono_empresa = st.text_input("Teléfono Empresa")
-
-    with col2:
-        st.subheader("Datos del Trabajador y Curso")
-        tipo_doc = st.selectbox("Tipo Documento", ["CC", "CE", "PASAPORTE"])
-        num_doc = st.text_input("Número de Documento")
-        nombres = st.text_input("Nombres")
-        apellidos = st.text_input("Apellidos")
-        correo_trabajador = st.text_input("Correo Personal")
-        whatsapp = st.text_input("Número de WhatsApp (Ej: 3197259806)")
+    with st.form("form_registro_cliente", clear_on_submit=True):
+        col1, col2 = st.columns(2)
         
-        nivel_curso = st.selectbox("Nivel de Curso", [
-            "Reentrenamiento Avanzado",
-            "Trabajador Autorizado",
-            "Coordinador de Trabajo en Alturas",
-            "Jefe de Área"
-        ])
-        fecha_emision = st.date_input("Fecha de Emisión del Curso")
+        with col1:
+            st.subheader("Datos de la Empresa")
+            nit = st.text_input("NIT")
+            dv = st.text_input("Dígito de Verificación (DV)", max_chars=1, value="0")
+            razon_social = st.text_input("Razón Social")
+            regimen = st.selectbox("Régimen Fiscal", ["Simplificado", "Común", "Especial"])
+            direccion = st.text_input("Dirección")
+            ciudad = st.text_input("Ciudad", value="Fusagasugá")
+            correo_fe = st.text_input("Correo Facturación Electrónica")
+            telefono_empresa = st.text_input("Teléfono Empresa")
 
-    if st.button("💾 Guardar y Registrar", type="primary"):
-    # Limpieza de espacios en blanco
-    nit_val = nit.strip() if nit else ""
-    doc_val = numero_doc.strip() if 'numero_doc' in locals() and numero_doc else ""
-    nombres_val = nombres.strip() if nombres else ""
-    correo_fe_val = correo_fe.strip() if 'correo_fe' in locals() and correo_fe else ""
+        with col2:
+            st.subheader("Datos del Trabajador y Curso")
+            tipo_doc = st.selectbox("Tipo Documento", ["CC", "CE", "PASAPORTE"])
+            num_doc = st.text_input("Número de Documento")
+            nombres = st.text_input("Nombres")
+            apellidos = st.text_input("Apellidos")
+            correo_trabajador = st.text_input("Correo Personal")
+            whatsapp = st.text_input("Número de WhatsApp (Ej: 3197259806)")
+            
+            nivel_curso = st.selectbox("Nivel de Curso", [
+                "Reentrenamiento Avanzado",
+                "Trabajador Autorizado",
+                "Coordinador de Trabajo en Alturas",
+                "Jefe de Área"
+            ])
+            fecha_emision = st.date_input("Fecha de Emisión del Curso")
 
-    # Verificar exactamente qué campo está fallando
-    faltantes = []
-    if not nit_val: faltantes.append("NIT")
-    if not doc_val: faltantes.append("Número de Documento")
-    if not nombres_val: faltantes.append("Nombres")
-    if not correo_fe_val: faltantes.append("Correo FE")
+        btn_guardar = st.form_submit_button("💾 Guardar y Registrar", type="primary")
 
-    if faltantes:
-        st.error(f"⚠️ Por favor completa los siguientes campos obligatorios: {', '.join(faltantes)}")
-    else:
-        # Aquí continúa el guardado en la base de datos...
-        try:
-            conn = sqlite3.connect(config.DB_NAME)
-            cursor = conn.cursor()
-            # Guardar registro...
-            st.success("¡Cliente y Curso registrados exitosamente!")
-        except Exception as e:
-            st.error(f"Error guardando en la base de datos: {e}")
+    if btn_guardar:
+        nit_val = nit.strip()
+        doc_val = num_doc.strip()
+        nombres_val = nombres.strip()
+        correo_fe_val = correo_fe.strip()
+
+        faltantes = []
+        if not nit_val: faltantes.append("NIT")
+        if not doc_val: faltantes.append("Número de Documento")
+        if not nombres_val: faltantes.append("Nombres")
+        if not correo_fe_val: faltantes.append("Correo FE")
+
+        if faltantes:
+            st.error(f"⚠️ Por favor completa los siguientes campos obligatorios: {', '.join(faltantes)}")
+        else:
+            try:
+                # Calcular fecha de vencimiento (1 año después)
+                f_emision_str = fecha_emision.strftime("%Y-%m-%d")
+                f_venc_obj = fecha_emision.replace(year=fecha_emision.year + 1)
+                f_vencimiento_str = f_venc_obj.strftime("%Y-%m-%d")
+
+                conn = sqlite3.connect(config.DB_NAME)
+                cursor = conn.cursor()
+                
+                # 1. Insertar o recuperar Empresa
+                cursor.execute("""
+                    INSERT OR IGNORE INTO empresas (nit, dv, razon_social, regimen, direccion, ciudad, correo_fe, telefono)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (nit_val, dv, razon_social, regimen, direccion, ciudad, correo_fe_val, telefono_empresa))
+                
+                cursor.execute("SELECT id FROM empresas WHERE nit = ?", (nit_val,))
+                empresa_id = cursor.fetchone()[0]
+
+                # 2. Insertar Trabajador
+                cursor.execute("""
+                    INSERT INTO trabajadores (empresa_id, tipo_doc, numero_doc, nombres, apellidos, correo, telefono)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (empresa_id, tipo_doc, doc_val, nombres_val, apellidos, correo_trabajador, whatsapp))
+                
+                trabajador_id = cursor.lastrowid
+
+                # 3. Insertar Certificado/Curso
+                cursor.execute("""
+                    INSERT INTO certificados (trabajador_id, nivel_curso, fecha_emision, fecha_vencimiento, alerta_30d_enviada, alerta_15d_enviada, alerta_5d_enviada)
+                    VALUES (?, ?, ?, ?, 0, 0, 0)
+                """, (trabajador_id, nivel_curso, f_emision_str, f_vencimiento_str))
+
+                conn.commit()
+                conn.close()
+                st.success("🎉 ¡Cliente y Curso registrados exitosamente!")
+            except Exception as e:
+                st.error(f"Error guardando en la base de datos: {e}")
+
 elif opcion == "Ver Clientes Registrados":
     st.header("📋 Lista de Clientes y Cursos en la Base de Datos")
     
-    conn = sqlite3.connect("centro_entrenamiento.db")
-    
-    # Consulta directa de todas las columnas unidas
+    conn = sqlite3.connect(config.DB_NAME)
     query = """
-    SELECT * 
+    SELECT 
+        e.razon_social AS Empresa,
+        e.nit AS NIT,
+        t.numero_doc AS Documento,
+        (t.nombres || ' ' || t.apellidos) AS Trabajador,
+        t.correo AS Correo_Trabajador,
+        t.telefono AS Whatsapp,
+        c.nivel_curso AS Curso,
+        c.fecha_emision AS Emision,
+        c.fecha_vencimiento AS Vencimiento,
+        c.alerta_30d_enviada AS Alerta_30d
     FROM certificados c
     JOIN trabajadores t ON c.trabajador_id = t.id
     JOIN empresas e ON t.empresa_id = e.id
@@ -96,8 +137,6 @@ elif opcion == "Ver Clientes Registrados":
         conn.close()
 
         if not df.empty:
-            # Eliminamos columnas repetidas de IDs para dejar la tabla limpia
-            df = df.loc[:, ~df.columns.duplicated()]
             st.dataframe(df, use_container_width=True)
         else:
             st.info("Aún no hay clientes registrados en la base de datos.")
