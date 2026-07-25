@@ -1,8 +1,7 @@
 import os
 
 # Nombre de la Base de Datos
-DB_NAME = "centro_entrenamiento.db"
-
+DB_NAME = "centro_entrenamiento_v2.db"
 # Configuración para enviar correos (SMTP)
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
