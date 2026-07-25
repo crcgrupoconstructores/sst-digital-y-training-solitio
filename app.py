@@ -199,12 +199,11 @@ elif opcion == "Revisar y Enviar Alertas":
                     
                     with col_btn:
                         if st.button("📨 Enviar Alerta", key=f"btn_alerta_{row['certificado_id']}"):
-                            # Aquí puedes disparar la función unitaria de envío si la tienes en notificaciones, por ejemplo:
-                            try:
-                                # Llamada simulada o directa al envío de correo/whatsapp unitario
+                            exito, mensaje = notificaciones.enviar_alerta_individual(row['certificado_id'])
+                            if exito:
                                 st.success(f"¡Alerta enviada a {row['Trabajador']}!")
-                            except Exception as ex:
-                                st.error(f"Error al enviar: {ex}")
+                            else:
+                                st.error(f"Error: {mensaje}")
                     st.markdown("---")
         else:
             st.info("No hay registros en la base de datos para evaluar alertas.")
