@@ -9,21 +9,21 @@ import config
 import streamlit as st
 
 def enviar_email(destinatario, asunto, texto_plano):
-    """Envía correos electrónicos automatizados con codificación UTF-8 en cabeceras y cuerpo."""
+    """Envía correos electrónicos utilizando bytes UTF-8 para evitar cualquier error de codificación ASCII."""
     msg = MIMEMultipart()
     msg['From'] = config.EMAIL_SENDER
     msg['To'] = destinatario
+    msg['Subject'] = asunto
     
-    # Se usa Header para evitar el error de codificación ASCII con la 'ñ' u otros acentos
-    msg['Subject'] = Header(asunto, 'utf-8')
-    
-    msg.attach(MIMEText(texto_plano, 'plain', 'utf-8'))
+    # Adjuntar convirtiendo directamente el texto plano y el charset a bytes UTF-8
+    msg.attach(MIMEText(texto_plano.encode('utf-8'), 'plain', 'utf-8'))
 
     try:
         with smtplib.SMTP(config.SMTP_SERVER, config.SMTP_PORT) as server:
             server.starttls()
             server.login(config.EMAIL_SENDER, config.EMAIL_PASSWORD)
-            server.sendmail(config.EMAIL_SENDER, destinatario, msg.as_string())
+            # Enviar el mensaje convirtiendo todo el paquete a bytes UTF-8
+            server.sendmail(config.EMAIL_SENDER, destinatario, msg.as_bytes())
         return True, "Correo enviado con exito"
     except Exception as e:
         error_msg = f"Error SMTP de Gmail: {str(e)}"
