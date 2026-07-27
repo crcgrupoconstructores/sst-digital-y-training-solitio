@@ -9,13 +9,15 @@ import streamlit as st
 
 from email.header import Header
 
+from email.header import Header
+
 def enviar_email(destinatario, asunto, texto_plano):
     """Envía correos electrónicos automatizados con cabeceras codificadas en UTF-8."""
     msg = MIMEMultipart()
     msg['From'] = config.EMAIL_SENDER
     msg['To'] = destinatario
     
-    # Forzar la codificación UTF-8 en el asunto para que soporte cualquier carácter especial o tilde
+    # Codificar el asunto explícitamente en UTF-8 para evitar el error de ASCII con la ñ
     msg['Subject'] = Header(asunto, 'utf-8')
     
     msg.attach(MIMEText(texto_plano, 'plain', 'utf-8'))
