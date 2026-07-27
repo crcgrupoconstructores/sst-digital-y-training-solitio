@@ -13,7 +13,9 @@ def enviar_email(destinatario, asunto, html_content):
     msg['From'] = config.EMAIL_SENDER
     msg['To'] = destinatario
     msg['Subject'] = asunto
-    msg.attach(MIMEText(html_content, 'html'))
+    
+    # CORREGIDO: Se especifica la codificación UTF-8 para evitar errores con tildes y caracteres especiales
+    msg.attach(MIMEText(html_content, 'html', 'utf-8'))
 
     try:
         with smtplib.SMTP(config.SMTP_SERVER, config.SMTP_PORT) as server:
