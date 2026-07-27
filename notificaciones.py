@@ -8,8 +8,6 @@ from datetime import datetime
 import config
 import streamlit as st
 
-from email.header import Header
-
 def enviar_email(destinatario, asunto, texto_plano):
     """Envía correos electrónicos utilizando codificación UTF-8 segura para cabeceras y cuerpo."""
     msg = MIMEMultipart()
