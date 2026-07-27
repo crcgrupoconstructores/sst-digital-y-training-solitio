@@ -12,9 +12,11 @@ def enviar_email(destinatario, asunto, html_content):
     msg = MIMEMultipart()
     msg['From'] = config.EMAIL_SENDER
     msg['To'] = destinatario
-    msg['Subject'] = asunto
     
-    # CORREGIDO: Se especifica la codificación UTF-8 para evitar errores con tildes y caracteres especiales
+    # CORREGIDO: Codificar el asunto explícitamente en UTF-8 para evitar errores de ASCII
+    from email.header import Header
+    msg['Subject'] = Header(asunto, 'utf-8')
+    
     msg.attach(MIMEText(html_content, 'html', 'utf-8'))
 
     try:
