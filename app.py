@@ -77,14 +77,13 @@ if opcion == "Registrar Cliente":
         correo_fe_val = correo_fe.strip()
 
         if not all([nit_val, doc_val, nombres_val, correo_fe_val]):
-            st.error("⚠️ Por favor completa los campos obligatorios (NIT, Documento, Nombres y Correo FE).")
-        else:
-            try:
-              from dateutil.relativedelta import relativedelta
+        st.error("⚠️ Por favor completa los campos obligatorios (NIT, Documento, Nombres y Correo FE).")
+    else:
+        from dateutil.relativedelta import relativedelta
 
-f_emision_str = fecha_emision.strftime("%Y-%m-%d")
-f_venc_obj = fecha_emision + relativedelta(months=18) # <-- Suma exacta de 18 meses
-f_vencimiento_str = f_venc_obj.strftime("%Y-%m-%d")
+        f__emision_str = fecha_emision.strftime("%Y-%m-%d")
+        f_venc_obj = fecha_emision + relativedelta(months=18)  # <-- Suma exacta de 18 meses
+        f_vencimiento_str = f_venc_obj.strftime("%Y-%m-%d")
 
                 conn = sqlite3.connect(config.DB_NAME)
                 cursor = conn.cursor()
