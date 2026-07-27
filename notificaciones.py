@@ -2,7 +2,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import requests
-import sqlite3
+import psycopg2
 from datetime import datetime
 import config
 import streamlit as st
@@ -54,8 +54,7 @@ def enviar_whatsapp(numero, texto):
 def enviar_alerta_individual(certificado_id):
     """Envía correo y WhatsApp de forma manual para un certificado y reporta el estado exacto."""
     try:
-        conn = sqlite3.connect(config.DB_NAME)
-        conn.row_factory = sqlite3.Row
+        conn = psycopg2.connect(st.secrets["DATABASE_URL"])
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -64,7 +63,7 @@ def enviar_alerta_individual(certificado_id):
                 c.nivel_curso, c.fecha_vencimiento
             FROM certificados c
             JOIN trabajadores t ON c.trabajador_id = t.id
-            WHERE c.id = ?
+            WHERE c.id = %s
         """, (certificado_id,))
         
         row = cursor.fetchone()
@@ -73,11 +72,11 @@ def enviar_alerta_individual(certificado_id):
         if not row:
             return False, "Certificado no encontrado en la base de datos."
 
-        nombre = f"{row['nombres']} {row['apellidos']}"
-        correo = row['correo']
-        telefono = row['telefono']
-        curso = row['nivel_curso']
-        fecha_str = row['fecha_vencimiento']
+        nombre = f"{row[0]} {row[1]}"
+        correo = row[2]
+        telefono = row[3]
+        curso = row[4]
+        fecha_str = str(row[5])
 
         hoy = datetime.now().date()
         fecha_venc = datetime.strptime(fecha_str, "%Y-%m-%d").date()
@@ -108,3 +107,22 @@ def enviar_alerta_individual(certificado_id):
         return True, " | ".join(resultados)
     except Exception as e:
         return False, f"Excepción general: {str(e)}"
+
+def ejecutar_alertas_diarias():
+    """Recorre todos los certificados y envía alertas automáticas según su vencimiento."""
+    try:
+        conn = psycopg2.connect(st.secrets["DATABASE_URL"])
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id FROM certificados")
+        certificados = cursor.fetchall()
+        conn.close()
+
+        resultados_totales = []
+        for cert in certificados:
+            exito, mensaje = enviar_alerta_individual(cert[0])
+            resultados_totales.append(f"ID {cert[0]}: {mensaje}")
+            
+        return True, " | ".join(resultados_totales)
+    except Exception as e:
+        return False, f"Error en alertas diarias: {str(e)}"
