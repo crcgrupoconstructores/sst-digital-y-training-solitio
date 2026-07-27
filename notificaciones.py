@@ -1,23 +1,20 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.header import Header
 import requests
 import psycopg2
 from datetime import datetime
 import config
 import streamlit as st
 
-from email.header import Header
-
-from email.header import Header
-
 def enviar_email(destinatario, asunto, texto_plano):
-    """Envía correos electrónicos automatizados con cabeceras codificadas en UTF-8."""
+    """Envía correos electrónicos automatizados con codificación UTF-8 en cabeceras y cuerpo."""
     msg = MIMEMultipart()
     msg['From'] = config.EMAIL_SENDER
     msg['To'] = destinatario
     
-    # Codificar el asunto explícitamente en UTF-8 para evitar el error de ASCII con la ñ
+    # Se usa Header para evitar el error de codificación ASCII con la 'ñ' u otros acentos
     msg['Subject'] = Header(asunto, 'utf-8')
     
     msg.attach(MIMEText(texto_plano, 'plain', 'utf-8'))
@@ -89,10 +86,8 @@ def enviar_alerta_individual(certificado_id):
         fecha_venc = datetime.strptime(fecha_str, "%Y-%m-%d").date()
         dias_restantes = (fecha_venc - hoy).days
 
-        # Asunto sin tildes ni caracteres especiales problemáticos
         asunto = f"Alerta Vencimiento de Curso: {curso}"
         
-        # Mensaje en texto plano limpio
         cuerpo_correo = f"""Hola {nombre},
 
 Te recordamos que tu curso de {curso} {'ya se encuentra vencido' if dias_restantes < 0 else f'vence en {dias_restantes} dias'}.
