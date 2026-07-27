@@ -90,7 +90,7 @@ if opcion == "Registrar Cliente":
                 conn = psycopg2.connect(st.secrets["DATABASE_URL"])
                 cursor = conn.cursor()
                 
-                # Inserción de empresa (PostgreSQL usa %s y RETURNING id para obtener el ID creado)
+                # Inserción de empresa
                 cursor.execute("""
                     INSERT INTO empresas (nit, dv, razon_social, direccion, ciudad, correo_fe, telefono)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -133,15 +133,15 @@ elif opcion == "Ver Clientes Registrados":
         conn = psycopg2.connect(st.secrets["DATABASE_URL"])
         query = """
         SELECT 
-            e.razon_social AS Empresa,
-            e.nit AS NIT,
-            t.numero_doc AS Documento,
-            (t.nombres || ' ' || t.apellidos) AS Trabajador,
-            t.correo AS Correo_Trabajador,
-            t.telefono AS Whatsapp,
-            c.nivel_curso AS Curso,
-            c.fecha_emision AS Emision,
-            c.fecha_vencimiento AS Vencimiento
+            e.razon_social AS empresa,
+            e.nit AS nit,
+            t.numero_doc AS documento,
+            (t.nombres || ' ' || t.apellidos) AS trabajador,
+            t.correo AS correo_trabajador,
+            t.telefono AS whatsapp,
+            c.nivel_curso AS curso,
+            c.fecha_emision AS emision,
+            c.fecha_vencimiento AS vencimiento
         FROM certificados c
         JOIN trabajadores t ON c.trabajador_id = t.id
         JOIN empresas e ON t.empresa_id = e.id
@@ -175,12 +175,12 @@ elif opcion == "Revisar y Enviar Alertas":
         query = """
         SELECT 
             c.id AS certificado_id,
-            e.razon_social AS Empresa,
-            (t.nombres || ' ' || t.apellidos) AS Trabajador,
-            t.correo AS Correo,
-            t.telefono AS Whatsapp,
-            c.nivel_curso AS Curso,
-            c.fecha_vencimiento AS Vencimiento
+            e.razon_social AS empresa,
+            (t.nombres || ' ' || t.apellidos) AS trabajador,
+            t.correo AS correo,
+            t.telefono AS whatsapp,
+            c.nivel_curso AS curso,
+            c.fecha_vencimiento AS vencimiento
         FROM certificados c
         JOIN trabajadores t ON c.trabajador_id = t.id
         JOIN empresas e ON t.empresa_id = e.id
@@ -192,7 +192,7 @@ elif opcion == "Revisar y Enviar Alertas":
             hoy = datetime.now().date()
             
             for index, row in df_alertas.iterrows():
-                f_venc = datetime.strptime(str(row["Vencimiento"]), "%Y-%m-%d").date()
+                f_venc = datetime.strptime(str(row["vencimiento"]), "%Y-%m-%d").date()
                 dias_restantes = (f_venc - hoy).days
                 
                 with st.container():
@@ -206,8 +206,8 @@ elif opcion == "Revisar y Enviar Alertas":
                         else:
                             estado_txt = f"🟢 Vence en **{dias_restantes} días**"
                         
-                        st.markdown(f"**Empresa:** {row['Empresa']} | **Trabajador:** {row['Trabajador']} | **Curso:** {row['Curso']}")
-                        st.markdown(f"📅 Fecha Vencimiento: `{row['Vencimiento']}` | {estado_txt} | ✉️ `{row['Correo']}` | 📱 `{row['Whatsapp']}`")
+                        st.markdown(f"**Empresa:** {row['empresa']} | **Trabajador:** {row['trabajador']} | **Curso:** {row['curso']}")
+                        st.markdown(f"📅 Fecha Vencimiento: `{row['vencimiento']}` | {estado_txt} | ✉️ `{row['correo']}` | 📱 `{row['whatsapp']}`")
                     
                     with col_btn:
                         if st.button("📨 Enviar Alerta", key=f"btn_alerta_{row['certificado_id']}"):
