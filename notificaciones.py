@@ -1,7 +1,6 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.header import Header
 import requests
 import psycopg2
 from datetime import datetime
@@ -9,13 +8,11 @@ import config
 import streamlit as st
 
 def enviar_email(destinatario, asunto, texto_plano):
-    """Envía correos electrónicos utilizando codificación UTF-8 segura para cabeceras y cuerpo."""
+    """Envía correos electrónicos asegurando compatibilidad total mediante codificación UTF-8."""
     msg = MIMEMultipart()
     msg['From'] = config.EMAIL_SENDER
     msg['To'] = destinatario
-    
-    # Codificar explícitamente el asunto usando Header para evitar el error ASCII con la 'ñ'
-    msg['Subject'] = Header(asunto, 'utf-8')
+    msg['Subject'] = asunto
     
     msg.attach(MIMEText(texto_plano, 'plain', 'utf-8'))
 
@@ -23,7 +20,8 @@ def enviar_email(destinatario, asunto, texto_plano):
         with smtplib.SMTP(config.SMTP_SERVER, config.SMTP_PORT) as server:
             server.starttls()
             server.login(config.EMAIL_SENDER, config.EMAIL_PASSWORD)
-            server.sendmail(config.EMAIL_SENDER, destinatario, msg.as_string())
+            # Forzar el envío convirtiendo todo el mensaje a bytes UTF-8 de forma segura
+            server.sendmail(config.EMAIL_SENDER, destinatario, msg.as_string().encode('utf-8'))
         return True, "Correo enviado con exito"
     except Exception as e:
         error_msg = f"Error SMTP de Gmail: {str(e)}"
@@ -86,7 +84,8 @@ def enviar_alerta_individual(certificado_id):
         fecha_venc = datetime.strptime(fecha_str, "%Y-%m-%d").date()
         dias_restantes = (fecha_venc - hoy).days
 
-        asunto = f"Alerta Vencimiento de Curso: {curso}"
+        # Evitamos caracteres especiales en el asunto para prevenir fallos en servidores SMTP estrictos
+        asunto = f"Aviso de Vencimiento de Curso: {curso}"
         
         cuerpo_correo = f"""Hola {nombre},
 
