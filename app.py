@@ -2,7 +2,7 @@ import streamlit as st
 import database
 import notificaciones
 import config
-import sqlite3
+import psycopg2
 import pandas as pd
 from datetime import datetime
 
@@ -77,35 +77,47 @@ if opcion == "Registrar Cliente":
         correo_fe_val = correo_fe.strip()
 
         if not all([nit_val, doc_val, nombres_val, correo_fe_val]):
-        st.error("⚠️ Por favor completa los campos obligatorios (NIT, Documento, Nombres y Correo FE).")
-    else:
-        from dateutil.relativedelta import relativedelta
+            st.error("⚠️ Por favor completa los campos obligatorios (NIT, Documento, Nombres y Correo FE).")
+        else:
+            try:
+                from dateutil.relativedelta import relativedelta
 
-        f__emision_str = fecha_emision.strftime("%Y-%m-%d")
-        f_venc_obj = fecha_emision + relativedelta(months=18)  # <-- Suma exacta de 18 meses
-        f_vencimiento_str = f_venc_obj.strftime("%Y-%m-%d")
+                f_emision_str = fecha_emision.strftime("%Y-%m-%d")
+                f_venc_obj = fecha_emision + relativedelta(months=18)  # <-- Suma exacta de 18 meses
+                f_vencimiento_str = f_venc_obj.strftime("%Y-%m-%d")
 
-                conn = sqlite3.connect(config.DB_NAME)
+                # Conexión directa a Supabase usando Secrets
+                conn = psycopg2.connect(st.secrets["DATABASE_URL"])
                 cursor = conn.cursor()
                 
+                # Inserción de empresa (PostgreSQL usa %s y RETURNING id para obtener el ID creado)
                 cursor.execute("""
-                    INSERT OR IGNORE INTO empresas (nit, dv, razon_social, direccion, ciudad, correo_fe, telefono)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO empresas (nit, dv, razon_social, direccion, ciudad, correo_fe, telefono)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (nit) DO UPDATE SET razon_social = EXCLUDED.razon_social
+                    RETURNING id
                 """, (nit_val, dv, razon_social, direccion, ciudad, correo_fe_val, telefono_empresa))
                 
-                cursor.execute("SELECT id FROM empresas WHERE nit = ?", (nit_val,))
-                empresa_id = cursor.fetchone()[0]
+                resultado_empresa = cursor.fetchone()
+                if resultado_empresa:
+                    empresa_id = resultado_empresa[0]
+                else:
+                    cursor.execute("SELECT id FROM empresas WHERE nit = %s", (nit_val,))
+                    empresa_id = cursor.fetchone()[0]
 
+                # Inserción de trabajador
                 cursor.execute("""
                     INSERT INTO trabajadores (empresa_id, tipo_doc, numero_doc, nombres, apellidos, correo, telefono)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
                 """, (empresa_id, tipo_doc, doc_val, nombres_val, apellidos, correo_trabajador, whatsapp))
                 
-                trabajador_id = cursor.lastrowid
+                trabajador_id = cursor.fetchone()[0]
 
+                # Inserción de certificado
                 cursor.execute("""
                     INSERT INTO certificados (trabajador_id, nivel_curso, fecha_emision, fecha_vencimiento, alerta_30d_enviada, alerta_15d_enviada, alerta_5d_enviada)
-                    VALUES (?, ?, ?, ?, 0, 0, 0)
+                    VALUES (%s, %s, %s, %s, 0, 0, 0)
                 """, (trabajador_id, nivel_curso, f_emision_str, f_vencimiento_str))
 
                 conn.commit()
@@ -117,24 +129,23 @@ if opcion == "Registrar Cliente":
 elif opcion == "Ver Clientes Registrados":
     st.header("📋 Lista de Clientes y Cursos en la Base de Datos")
     
-    conn = sqlite3.connect(config.DB_NAME)
-    query = """
-    SELECT 
-        e.razon_social AS Empresa,
-        e.nit AS NIT,
-        t.numero_doc AS Documento,
-        (t.nombres || ' ' || t.apellidos) AS Trabajador,
-        t.correo AS Correo_Trabajador,
-        t.telefono AS Whatsapp,
-        c.nivel_curso AS Curso,
-        c.fecha_emision AS Emision,
-        c.fecha_vencimiento AS Vencimiento
-    FROM certificados c
-    JOIN trabajadores t ON c.trabajador_id = t.id
-    JOIN empresas e ON t.empresa_id = e.id
-    """
-    
     try:
+        conn = psycopg2.connect(st.secrets["DATABASE_URL"])
+        query = """
+        SELECT 
+            e.razon_social AS Empresa,
+            e.nit AS NIT,
+            t.numero_doc AS Documento,
+            (t.nombres || ' ' || t.apellidos) AS Trabajador,
+            t.correo AS Correo_Trabajador,
+            t.telefono AS Whatsapp,
+            c.nivel_curso AS Curso,
+            c.fecha_emision AS Emision,
+            c.fecha_vencimiento AS Vencimiento
+        FROM certificados c
+        JOIN trabajadores t ON c.trabajador_id = t.id
+        JOIN empresas e ON t.empresa_id = e.id
+        """
         df = pd.read_sql_query(query, conn)
         conn.close()
 
@@ -159,21 +170,21 @@ elif opcion == "Revisar y Enviar Alertas":
     st.markdown("---")
     st.subheader("📊 Panel de Vencimientos y Envío Manual")
 
-    conn = sqlite3.connect(config.DB_NAME)
-    query = """
-    SELECT 
-        c.id AS certificado_id,
-        e.razon_social AS Empresa,
-        (t.nombres || ' ' || t.apellidos) AS Trabajador,
-        t.correo AS Correo,
-        t.telefono AS Whatsapp,
-        c.nivel_curso AS Curso,
-        c.fecha_vencimiento AS Vencimiento
-    FROM certificados c
-    JOIN trabajadores t ON c.trabajador_id = t.id
-    JOIN empresas e ON t.empresa_id = e.id
-    """
     try:
+        conn = psycopg2.connect(st.secrets["DATABASE_URL"])
+        query = """
+        SELECT 
+            c.id AS certificado_id,
+            e.razon_social AS Empresa,
+            (t.nombres || ' ' || t.apellidos) AS Trabajador,
+            t.correo AS Correo,
+            t.telefono AS Whatsapp,
+            c.nivel_curso AS Curso,
+            c.fecha_vencimiento AS Vencimiento
+        FROM certificados c
+        JOIN trabajadores t ON c.trabajador_id = t.id
+        JOIN empresas e ON t.empresa_id = e.id
+        """
         df_alertas = pd.read_sql_query(query, conn)
         conn.close()
 
@@ -181,7 +192,7 @@ elif opcion == "Revisar y Enviar Alertas":
             hoy = datetime.now().date()
             
             for index, row in df_alertas.iterrows():
-                f_venc = datetime.strptime(row["Vencimiento"], "%Y-%m-%d").date()
+                f_venc = datetime.strptime(str(row["Vencimiento"]), "%Y-%m-%d").date()
                 dias_restantes = (f_venc - hoy).days
                 
                 with st.container():
