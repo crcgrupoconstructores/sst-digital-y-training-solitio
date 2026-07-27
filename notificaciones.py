@@ -7,14 +7,17 @@ from datetime import datetime
 import config
 import streamlit as st
 
+from email.header import Header
+
 def enviar_email(destinatario, asunto, texto_plano):
-    """Envía correos electrónicos automatizados en texto plano para evitar errores de codificación."""
+    """Envía correos electrónicos automatizados con cabeceras codificadas en UTF-8."""
     msg = MIMEMultipart()
     msg['From'] = config.EMAIL_SENDER
     msg['To'] = destinatario
-    msg['Subject'] = asunto
     
-    # Usar texto plano con codificación utf-8 explícita
+    # Forzar la codificación UTF-8 en el asunto para que soporte cualquier carácter especial o tilde
+    msg['Subject'] = Header(asunto, 'utf-8')
+    
     msg.attach(MIMEText(texto_plano, 'plain', 'utf-8'))
 
     try:
