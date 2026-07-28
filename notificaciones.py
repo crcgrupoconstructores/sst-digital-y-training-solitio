@@ -8,12 +8,11 @@ import config
 import streamlit as st
 
 def enviar_email(destinatario, asunto, texto_plano):
-    """Envía correos electrónicos filtrando caracteres especiales para garantizar compatibilidad ASCII en cabeceras."""
+    """Envía correos electrónicos utilizando codificación UTF-8 segura."""
     msg = MIMEMultipart()
     msg['From'] = config.EMAIL_SENDER
     msg['To'] = destinatario
     
-    # Limpiar el asunto para remover cualquier carácter acentuado o 'ñ' que cause conflictos en SMTP
     asunto_limpio = asunto.encode('ascii', 'ignore').decode('ascii')
     msg['Subject'] = asunto_limpio
     
@@ -56,18 +55,20 @@ def enviar_whatsapp(numero, texto):
         return False, error_msg
 
 def enviar_alerta_individual(certificado_id):
-    """Envía correo y WhatsApp al trabajador y a la empresa de forma manual o automática."""
+    """Envía correo y WhatsApp al trabajador y a la empresa facturadora registrada."""
     try:
         conn = psycopg2.connect(st.secrets["DATABASE_URL"])
         cursor = conn.cursor()
 
-        # Añadimos t.cedula a la consulta SQL para mostrarla en el mensaje de la empresa
+        # Consulta ampliada para obtener los datos de la empresa/facturación asociados
         cursor.execute("""
             SELECT 
                 t.nombres, t.apellidos, t.cedula, t.correo, t.telefono, 
-                c.nivel_curso, c.fecha_vencimiento
+                c.nivel_curso, c.fecha_vencimiento,
+                e.nombre_empresa, e.correo_facturacion, e.telefono_facturacion
             FROM certificados c
             JOIN trabajadores t ON c.trabajador_id = t.id
+            LEFT JOIN empresas_facturacion e ON c.empresa_id = e.id
             WHERE c.id = %s
         """, (certificado_id,))
         
@@ -83,70 +84,55 @@ def enviar_alerta_individual(certificado_id):
         telefono = row[4]
         curso = row[5]
         fecha_str = str(row[6])
+        
+        # Datos de facturación de la empresa (si la tabla tiene los campos asociados)
+        nombre_empresa = row[7] if len(row) > 7 and row[7] else "San Felipe Construcciones SAS"
+        correo_empresa = row[8] if len(row) > 8 and row[8] else "Sanfelipeconstruccionessas@outlook.com"
+        telefono_empresa = row[9] if len(row) > 9 and row[9] else "+573148162910"
 
         hoy = datetime.now().date()
         fecha_venc = datetime.strptime(fecha_str, "%Y-%m-%d").date()
         dias_restantes = (fecha_venc - hoy).days
 
-        asunto_trabajador = f"Aviso de Vencimiento de Curso: {curso}"
-        cuerpo_trabajador = f"""Hola {nombre},
-
-Te recordamos que tu curso de {curso} {'ya se encuentra vencido' if dias_restantes < 0 else f'vence en {dias_restantes} dias'}.
-
-Por favor ponte en contacto con nosotros para gestionar tu renovacion."""
-
         resultados = []
 
-        # 1. Notificaciones al Trabajador
+        # 1. Notificación al Trabajador
         if correo:
-            exito_c, msg_c = enviar_email(correo, asunto_trabajador, cuerpo_trabajador)
+            asunto_t = f"Aviso de Vencimiento de Curso: {curso}"
+            cuerpo_t = f"Hola {nombre},\n\nTe recordamos que tu curso de {curso} {'ya se encuentra vencido' if dias_restantes < 0 else f'vence en {dias_restantes} dias'}.\n\nPor favor ponte en contacto con nosotros para gestionar tu renovacion."
+            exito_c, msg_c = enviar_email(correo, asunto_t, cuerpo_t)
             resultados.append(f"Correo Trabajador: {msg_c}")
         else:
-            resultados.append("Correo Trabajador: No tiene correo registrado")
+            resultados.append("Correo Trabajador: No registrado")
 
         if telefono:
-            msg_wa_trabajador = f"Hola {nombre}, tu curso de {curso} {'ya vencio' if dias_restantes < 0 else f'vence en {dias_restantes} dias'}. ¡Comunícate con nosotros para renovarlo!"
-            exito_w, msg_w = enviar_whatsapp(str(telefono), msg_wa_trabajador)
+            msg_wa_t = f"Hola {nombre}, tu curso de {curso} {'ya vencio' if dias_restantes < 0 else f'vence en {dias_restantes} dias'}. ¡Comunícate con nosotros para renovarlo!"
+            exito_w, msg_w = enviar_whatsapp(str(telefono), msg_wa_t)
             resultados.append(f"WhatsApp Trabajador: {msg_w}")
         else:
-            resultados.append("WhatsApp Trabajador: No tiene telefono registrado")
+            resultados.append("WhatsApp Trabajador: No registrado")
 
-        # 2. Notificaciones a la Empresa (San Felipe Construcciones S.A.S.)
-        # Datos de contacto corporativos extraídos de tus comunicaciones anteriores
-        correo_empresa = "Sanfelipeconstruccionessas@outlook.com"
-        telefono_empresa = "+573148162910"  # Número configurado para la constructora
+        # 2. Notificación a la Empresa de Facturación
+        if correo_empresa:
+            asunto_e = f"Alerta de Vencimiento - Empleado: {nombre}"
+            cuerpo_e = f"Estimada administración de {nombre_empresa},\n\nSe informa que el colaborador:\n- Nombre: {nombre}\n- Cédula: {cedula}\n- Curso: {curso}\n\nTiene su certificado {'vencido' if dias_restantes < 0 else f'proximo a vencer en {dias_restantes} dias'} (Fecha limite: {fecha_str}).\n\nPor favor reagenda tu cita."
+            exito_ce, msg_ce = enviar_email(correo_empresa, asunto_e, cuerpo_e)
+            resultados.append(f"Correo Empresa ({nombre_empresa}): {msg_ce}")
 
-        asunto_empresa = f"Alerta de Vencimiento - Empleado: {nombre}"
-        cuerpo_empresa = f"""Estimada administración de San Felipe Construcciones S.A.S.,
-
-Se informa que el colaborador:
-- Nombre: {nombre}
-- Cédula: {cedula}
-- Curso: {curso}
-
-Tiene su certificado {'vencido' if dias_restantes < 0 else f'próximo a vencer en {dias_restantes} días'} (Fecha límite: {fecha_str}). 
-
-Por favor reagenda tu cita o gestiona la renovación correspondiente."""
-
-        # Enviar correo a la empresa
-        exito_ce, msg_ce = enviar_email(correo_empresa, asunto_empresa, cuerpo_empresa)
-        resultados.append(f"Correo Empresa: {msg_ce}")
-
-        # Enviar WhatsApp a la empresa
-        msg_wa_empresa = f"Alerta SST: El empleado {nombre} (Cédula: {cedula}) tiene su curso de {curso} {'vencido' if dias_restantes < 0 else f'próximo a vencer en {dias_restantes} días'}. Reagenda tu cita."
-        exito_we, msg_we = enviar_whatsapp(telefono_empresa, msg_wa_empresa)
-        resultados.append(f"WhatsApp Empresa: {msg_we}")
+        if telefono_empresa:
+            msg_wa_e = f"Alerta SST: El empleado {nombre} (CC: {cedula}) tiene su curso de {curso} {'vencido' if dias_restantes < 0 else f'proximo a vencer en {dias_restantes} dias'}. Reagenda tu cita."
+            exito_we, msg_we = enviar_whatsapp(str(telefono_empresa), msg_wa_e)
+            resultados.append(f"WhatsApp Empresa: {msg_we}")
 
         return True, " | ".join(resultados)
     except Exception as e:
         return False, f"Excepcion general: {str(e)}"
 
 def ejecutar_alertas_diarias():
-    """Recorre todos los certificados y envía alertas automáticas según su vencimiento."""
+    """Recorre todos los certificados y envía alertas automáticas."""
     try:
         conn = psycopg2.connect(st.secrets["DATABASE_URL"])
         cursor = conn.cursor()
-        
         cursor.execute("SELECT id FROM certificados")
         certificados = cursor.fetchall()
         conn.close()
