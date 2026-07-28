@@ -60,7 +60,6 @@ def enviar_alerta_individual(certificado_id):
         conn = psycopg2.connect(st.secrets["DATABASE_URL"])
         cursor = conn.cursor()
 
-        # Consulta ampliada para obtener los datos de la empresa/facturación asociados
         cursor.execute("""
             SELECT 
                 t.nombres, t.apellidos, t.cedula, t.correo, t.telefono, 
@@ -85,7 +84,6 @@ def enviar_alerta_individual(certificado_id):
         curso = row[5]
         fecha_str = str(row[6])
         
-        # Datos de facturación de la empresa (si la tabla tiene los campos asociados)
         nombre_empresa = row[7] if len(row) > 7 and row[7] else "San Felipe Construcciones SAS"
         correo_empresa = row[8] if len(row) > 8 and row[8] else "Sanfelipeconstruccionessas@outlook.com"
         telefono_empresa = row[9] if len(row) > 9 and row[9] else "+573148162910"
