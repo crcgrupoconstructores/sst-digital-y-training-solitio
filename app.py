@@ -131,10 +131,13 @@ elif opcion == "Ver Clientes Registrados":
     
     try:
         conn = psycopg2.connect(st.secrets["DATABASE_URL"])
+        # Consulta actualizada para traer también el correo y teléfono de la empresa/facturación
         query = """
         SELECT 
             e.razon_social AS empresa,
             e.nit AS nit,
+            e.correo_fe AS correo_empresa,
+            e.telefono AS telefono_empresa,
             t.numero_doc AS documento,
             (t.nombres || ' ' || t.apellidos) AS trabajador,
             t.correo AS correo_trabajador,
